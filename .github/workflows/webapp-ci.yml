@@ -1,0 +1,46 @@
+name: Build, Test, and Deploy to Azure Web App
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  APP_PORT: 3000
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/frontendapp-node
+  AZURE_RESOURCE_GROUP: web-labs-rg    # 1-ci addımda yaratdığın ad
+  AZURE_WEBAPP_NAME: frontendapp-web   # 1-ci addımda yaratdığın ad
+
+jobs:
+  build-test-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Deploy to Azure Web App
+        run: |
+          az webapp config container set \
+            -g "${{ env.AZURE_RESOURCE_GROUP }}" \
+            -n "${{ env.AZURE_WEBAPP_NAME }}" \
+            --docker-custom-image-name "${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          az webapp restart -g "${{ env.AZURE_RESOURCE_GROUP }}" -n "${{ env.AZURE_WEBAPP_NAME }}"
